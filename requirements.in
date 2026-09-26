@@ -1,0 +1,6 @@
+pymupdf
+sentence-transformers
+chromadb
+rank_bm25
+streamlit
+requests
