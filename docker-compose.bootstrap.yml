@@ -1,0 +1,14 @@
+# Online, one-off setup: same project name and volumes, but the network can reach the Internet.
+# Always `down` this stack before starting the offline runtime so no container keeps the online network.
+services:
+  ollama:
+    healthcheck:
+      test: ["CMD", "ollama", "list"]   # daemon only: the model is not there before the first pull
+  app:
+    environment:
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+
+networks:
+  runtime:
+    internal: false

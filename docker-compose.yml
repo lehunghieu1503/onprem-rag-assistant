@@ -1,0 +1,55 @@
+# Offline runtime. `app` and `ollama` sit only on an internal network (no route to the Internet).
+# `ui` is a plain TCP forwarder: Docker ignores published ports on internal-only networks,
+# so it is the single container that also joins a normal bridge and exposes 127.0.0.1:8501.
+name: onprem-rag
+
+services:
+  ollama:
+    image: ollama/ollama:0.32.6
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes:
+      - ollama-models:/root/.ollama
+    networks: [runtime]
+    healthcheck:
+      test: ["CMD", "ollama", "show", "qwen3:4b-q4_K_M"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  app:
+    build: .
+    image: onprem-rag-app:local
+    environment:
+      RAG_OLLAMA_URL: http://ollama:11434
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - hf-cache:/cache/hf
+      - rag-index:/app/data/index
+      - ./data/raw:/app/data/raw:ro
+      - ./data/sources.jsonl:/app/data/sources.jsonl:ro
+      - ./eval/results:/app/eval/results
+    networks: [runtime]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ui:
+    image: alpine/socat:1.8.0.3
+    command: ["TCP-LISTEN:8501,fork,reuseaddr", "TCP:app:8501"]
+    ports:
+      - "127.0.0.1:8501:8501"
+    networks: [runtime, edge]
+    depends_on: [app]
+
+networks:
+  runtime:
+    internal: true
+  edge:
+
+volumes:
+  ollama-models:
+  hf-cache:
+  rag-index:

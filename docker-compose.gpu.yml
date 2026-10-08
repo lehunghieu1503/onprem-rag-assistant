@@ -1,0 +1,4 @@
+# GPU for the LLM only. Use after `docker run --rm --gpus all ubuntu:22.04 nvidia-smi` works on the host.
+services:
+  ollama:
+    gpus: all
