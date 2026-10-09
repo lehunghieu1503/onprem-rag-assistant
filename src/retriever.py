@@ -218,5 +218,8 @@ def load_embedder(cfg):
 def load_reranker(cfg):
     from sentence_transformers import CrossEncoder
 
-    return CrossEncoder(cfg.rerank_model, revision=cfg.rerank_revision, device=cfg.device, local_files_only=True,
-                        max_length=cfg.rerank_max_length)
+    model = CrossEncoder(cfg.rerank_model, revision=cfg.rerank_revision, device=cfg.rerank_device,
+                         local_files_only=True, max_length=cfg.rerank_max_length)
+    if cfg.rerank_device == "cuda":
+        model.model.half()  # fp16: about 1.1 GB VRAM instead of 2.3 GB
+    return model

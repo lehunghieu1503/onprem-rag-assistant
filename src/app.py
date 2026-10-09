@@ -19,7 +19,7 @@ MODE_LABELS = {"vector": "Vector only", "hybrid": "Hybrid (vector + BM25, RRF)",
 
 
 @st.cache_resource(show_spinner="Loading embedding, reranker and tokenizer…")
-def get_models(embed_rev: str, rerank_rev: str, tokenizer_rev: str, device: str):
+def get_models(embed_rev: str, rerank_rev: str, tokenizer_rev: str, device: str, rerank_device: str):
     """Keyed by immutable revisions/device only, so a new index generation never reloads models."""
     return pipeline.load_resources(load_config())
 
@@ -92,7 +92,7 @@ def main() -> None:
         state = pipeline.llm_state(cfg)
         placement = "not loaded" if not state["loaded"] else (
             "GPU" if state["gpu_fraction"] == 1 else "CPU" if not state["gpu_fraction"] else f"{state['gpu_fraction']:.0%} GPU")
-        st.markdown(f"**LLM** `{cfg.llm_model}` ({placement})  \n**Embedding/reranker** `{cfg.device}`")
+        st.markdown(f"**LLM** `{cfg.llm_model}` ({placement})  \n**Embedding** `{cfg.device}` · **Reranker** `{cfg.rerank_device}`")
 
     problems = readiness(cfg)
     if problems:
@@ -102,7 +102,7 @@ def main() -> None:
     try:
         gen_id = retriever.active_generation_id(cfg.index_root)  # read once per rerun; a request keeps its generation
         gen = get_generation(cfg.index_root, gen_id, cfg.index_config_hash())
-        res = get_models(cfg.embed_revision, cfg.rerank_revision, cfg.llm_tokenizer_revision, cfg.device)
+        res = get_models(cfg.embed_revision, cfg.rerank_revision, cfg.llm_tokenizer_revision, cfg.device, cfg.rerank_device)
     except Exception as e:  # missing snapshot, stale index, ... -> actionable message, nothing cached as ready
         st.error(f"Not ready: {e}")
         return

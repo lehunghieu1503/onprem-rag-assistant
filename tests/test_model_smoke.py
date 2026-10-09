@@ -39,7 +39,7 @@ def test_embedding_is_normalised_and_cross_lingual(res):
 def test_reranker_prefers_relevant_passage_and_runs_on_cpu(res, cfg):
     scores = res.reranker.predict([("Thời hạn kiểm định cần trục?", "Thời hạn kiểm định định kỳ cần trục là 02 năm."),
                                    ("Thời hạn kiểm định cần trục?", "Hard hats protect the head from impact.")])
-    assert scores[0] > scores[1] and str(res.reranker.device) == cfg.device
+    assert scores[0] > scores[1] and str(res.reranker.device).startswith(cfg.rerank_device)
 
 
 def test_reranker_keeps_evidence_at_end_of_long_passage(res):

@@ -23,6 +23,16 @@ under the listed file names. Ingest skips any file whose checksum differs.
 If your shell exports a foreign `PYTHONPATH` (for example ROS), run pytest as
 `env -u PYTHONPATH PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest`.
 
+### Reranker on GPU (optional, native only)
+
+```bash
+uv pip install --python .venv/bin/python --torch-backend auto -r requirements-gpu.txt   # CUDA build of torch
+export RAG_RERANK_DEVICE=cuda
+```
+
+Runs the reranker in fp16 beside the LLM. On the 8 GB test laptop this cut reranking from about 6.8 s to 0.2 s per
+query with identical top-5 results, but left little free VRAM. The Docker image stays CPU-only.
+
 ## Docker Compose
 
 ```bash

@@ -23,6 +23,7 @@ def test_env_override_and_types():
     {"RAG_CONTEXT_K": "50"},
     {"RAG_OLLAMA_URL": "ollama:11434"},
     {"RAG_DEVICE": "tpu"},
+    {"RAG_RERANK_DEVICE": "gpu0"},
 ])
 def test_invalid_values_rejected(env):
     with pytest.raises(ConfigError):

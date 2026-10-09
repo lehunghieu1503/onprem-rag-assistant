@@ -22,7 +22,7 @@ QUERY    câu hỏi ─▶ vector top 20 ┐
 | Thành phần | Lựa chọn |
 | --- | --- |
 | LLM | `qwen3:4b-q4_K_M` qua Ollama, GPU |
-| Embedding / reranker | `BAAI/bge-m3`, `BAAI/bge-reranker-v2-m3`, CPU |
+| Embedding / reranker | `BAAI/bge-m3` (CPU), `BAAI/bge-reranker-v2-m3` (CPU mặc định, GPU fp16 tùy chọn) |
 | Lưu trữ | ChromaDB (vector) + JSONL (văn bản gốc) + `rank_bm25` |
 | Giao diện / đóng gói | Streamlit, Docker Compose |
 
@@ -51,7 +51,7 @@ Bộ test: **40 câu độc lập** (34 có đáp án, 6 ngoài tài liệu), c�
 | Answer accuracy¹ | 31/34 (91,2%) | 32/34 (94,1%) | 31/34 (91,2%) |
 | Từ chối đúng (câu ngoài tài liệu) | 5/6 | 5/6 | 5/6 |
 | Tỷ lệ lỗi hệ thống | 0/40 | 0/40 | 0/40 |
-| Độ trễ warm, p50 / p95 | 2,8s / 3,8s | 2,8s / 4,2s | 9,7s / 11,4s |
+| Độ trễ warm, p50 / p95 | 2,8s / 3,8s | 2,8s / 4,2s | 9,7s / 11,4s (reranker CPU) · **3,0s / 4,2s** (reranker GPU) |
 
 ¹ Chấm tạm thời bằng cách đối chiếu câu trả lời với đáp án; chưa được người chấm độc lập rà lại. Citation
 precision/coverage chưa chấm.
@@ -61,7 +61,8 @@ Cách đọc kết quả:
 - Hybrid và reranker cải thiện rõ **thứ hạng** của đoạn bằng chứng (Hit@1 từ 41% lên 79%).
 - **Độ chính xác câu trả lời không tăng** trên bộ test này: cả ba chế độ sai 2–3 câu, khác câu nhau. Với 34 câu,
   một câu là 2,94 điểm %; chênh lệch 1 câu không có ý nghĩa thống kê.
-- Reranker chạy CPU là phần chậm nhất (khoảng 7 giây cho 10 ứng viên).
+- Reranker là phần chậm nhất khi chạy CPU (khoảng 6,8 giây cho 10 ứng viên). Chạy GPU fp16 còn khoảng 0,2 giây,
+  thứ tự top 5 giống hệt bản CPU trên cả 40 câu test; đổi lại VRAM 8 GB gần đầy khi chạy cùng LLM.
 
 Máy đo: Intel Core Ultra 9 275HX, 32 GB RAM, RTX 5060 Laptop 8 GB; LLM 100% trên GPU, RAM đỉnh của app 4,4 GB.
 Báo cáo từng lượt chạy: [`docs/reports/`](docs/reports/). Phương pháp và rubric: [`docs/evaluation.md`](docs/evaluation.md).
@@ -92,5 +93,5 @@ Hướng dẫn đầy đủ, gồm Docker Compose offline: [`docs/setup.md`](doc
 
 ## Hướng mở rộng
 
-OCR cho tài liệu scan · phân quyền theo người dùng · nhớ ngữ cảnh hội thoại · trích xuất bảng · reranker trên GPU ·
+OCR cho tài liệu scan · phân quyền theo người dùng · nhớ ngữ cảnh hội thoại · trích xuất bảng ·
 theo dõi hiệu lực văn bản.

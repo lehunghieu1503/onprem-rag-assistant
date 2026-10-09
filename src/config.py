@@ -25,6 +25,7 @@ class Config:
     llm_tokenizer: str = "Qwen/Qwen3-4B"
     llm_tokenizer_revision: str = "1cfa9a7208912126459214e8b04321603b3df60c"
     device: str = "cpu"
+    rerank_device: str = "cpu"  # "cuda" runs the reranker in fp16 next to the LLM (needs requirements-gpu.txt)
     torch_threads: int = 8  # tuned on dev: 8 threads rerank faster than all 24 hybrid cores
     # ingestion
     chunk_tokens: int = 500
@@ -121,8 +122,8 @@ def validate(cfg: Config) -> None:
         raise ConfigError("timeouts must be > 0")
     if not cfg.ollama_url.startswith(("http://", "https://")):
         raise ConfigError("ollama_url must be an http(s) URL")
-    if cfg.device not in ("cpu", "cuda"):
-        raise ConfigError("device must be cpu or cuda")
+    if cfg.device not in ("cpu", "cuda") or cfg.rerank_device not in ("cpu", "cuda"):
+        raise ConfigError("device and rerank_device must be cpu or cuda")
 
 
 def prompt_budget(cfg: Config) -> int:
