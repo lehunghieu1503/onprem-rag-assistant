@@ -218,8 +218,9 @@ def load_embedder(cfg):
 def load_reranker(cfg):
     from sentence_transformers import CrossEncoder
 
-    model = CrossEncoder(cfg.rerank_model, revision=cfg.rerank_revision, device=cfg.rerank_device,
-                         local_files_only=True, max_length=cfg.rerank_max_length)
-    if cfg.rerank_device == "cuda":
-        model.model.half()  # fp16: about 1.1 GB VRAM instead of 2.3 GB
-    return model
+    import torch
+
+    # fp16 on GPU: about 1.1 GB VRAM instead of 2.3 GB. Loaded directly in fp16 so the peak stays low.
+    dtype = torch.float16 if cfg.rerank_device == "cuda" else torch.float32
+    return CrossEncoder(cfg.rerank_model, revision=cfg.rerank_revision, device=cfg.rerank_device,
+                        local_files_only=True, max_length=cfg.rerank_max_length, model_kwargs={"torch_dtype": dtype})
