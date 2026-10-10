@@ -39,7 +39,7 @@ Một số quyết định thiết kế:
 
 ## Kết quả đánh giá
 
-Corpus: **19 PDF, 571 trang (558 trang có text dùng được), 812 chunk** — 12 tài liệu tiếng Anh (OSHA, HSE UK) và
+Corpus: **19 PDF, 568 trang (555 trang có text dùng được), 812 chunk** — 12 tài liệu tiếng Anh (OSHA, HSE UK) và
 7 văn bản tiếng Việt (QCVN, Nghị định, Thông tư, Công báo).
 Bộ test: **40 câu độc lập** (34 có đáp án, 6 ngoài tài liệu), cấu hình chốt trên 20 câu dev trước khi chạy test.
 
