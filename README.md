@@ -1,58 +1,58 @@
-# On-Premise RAG Assistant cho tài liệu Kỹ thuật & HSE
+# On-Premise RAG Assistant for Technical & HSE Documents
 
-Trợ lý hỏi đáp chạy hoàn toàn trên máy cục bộ. Hệ thống đọc tài liệu PDF tiếng Việt và tiếng Anh, tìm đoạn liên
-quan bằng tìm kiếm lai (ngữ nghĩa + từ khóa) có xếp hạng lại, rồi trả lời từng ý kèm trang nguồn để đối chiếu.
-Không gọi API bên ngoài: sau bước tải model một lần, cả nạp tài liệu lẫn truy vấn đều chạy không cần Internet.
+A question-answering assistant that runs entirely on a local machine. It reads Vietnamese and English PDF
+documents, finds the relevant passages with hybrid search (semantic + keyword) and reranking, and answers claim by
+claim with the source page for each one. It calls no external API: after a one-time model download, both ingestion
+and querying work without Internet access.
 
-![Giao diện hỏi đáp: câu trả lời kèm nguồn theo từng trang](docs/images/ui-answer.png)
+![Chat screen: an answer with page-level sources](docs/images/ui-answer.png)
 
-> Dự án portfolio cho một người dùng trên một máy. Chưa triển khai cho doanh nghiệp và không phải công cụ tư vấn an toàn.
+> A single-user, single-machine portfolio project. It has not been deployed in an organisation and is not a safety advisory tool.
 
-## Tóm tắt nhanh
+## At a glance
 
 | | |
 | --- | --- |
-| **Dữ liệu** | 19 PDF, 568 trang (555 trang có text), 812 đoạn; 7 văn bản tiếng Việt, 12 tài liệu tiếng Anh |
-| **Truy xuất** | Bằng chứng đúng đứng hạng 1 ở **79,4%** câu hỏi test (vector thuần: 41,2%); MRR@5 **0,848** (từ 0,591) |
-| **Câu trả lời** | 31–32/34 câu đúng ở cả ba chế độ; 0/40 lỗi hệ thống; 5/6 câu ngoài tài liệu được từ chối đúng |
-| **Tốc độ** | Khoảng **3 giây** mỗi câu (p50, model đã nạp) trên laptop RTX 5060 8 GB |
-| **Kiểm thử** | 101 unit test, 13 integration test với model thật, 4 test chạy offline trên Docker Compose |
+| **Corpus** | 19 PDFs, 568 pages (555 with usable text), 812 chunks; 7 Vietnamese regulations, 12 English documents |
+| **Retrieval** | The correct evidence ranks first for **79.4%** of test questions (vector only: 41.2%); MRR@5 **0.848** (from 0.591) |
+| **Answers** | 31–32 of 34 correct in all three modes; 0/40 system errors; 5/6 out-of-corpus questions correctly refused |
+| **Speed** | About **3 seconds** per question (p50, models loaded) on an RTX 5060 8 GB laptop |
+| **Tests** | 101 unit tests, 13 integration tests with real models, 4 offline tests on Docker Compose |
 
-Mọi con số ở trên được tính lại được từ kết quả gốc bằng `python -m eval.run_eval score`; phương pháp và giới hạn
-nằm ở mục [Đánh giá](#đánh-giá).
+Every number above can be recomputed from the raw results with `python -m eval.run_eval score`; method and limits
+are in [Evaluation](#evaluation).
 
-## Hệ thống làm gì
+## What it does
 
-- **Trả lời có nguồn theo từng ý.** Mỗi khẳng định đi kèm ID nguồn, ánh xạ tới file, số trang PDF và đoạn trích.
-- **Từ chối khi không có bằng chứng.** Câu hỏi ngoài kho tài liệu nhận thông báo "không tìm thấy", không phải câu
-  trả lời suy đoán.
-- **Hỏi tiếng Việt, tìm được tài liệu tiếng Anh** nhờ embedding đa ngôn ngữ.
-- **Bắt được mã hiệu** như `QCVN 25:2015/BLĐTBXH`, `TCVN 4244:2005`, `29 CFR 1910.147` nhờ nhánh từ khóa BM25.
-- **Ba chế độ truy xuất** dùng chung một pipeline để so sánh công bằng: chỉ vector, lai, lai có xếp hạng lại.
+- **Answers with a source for every claim.** Each claim carries source IDs that map to a file, a PDF page and the passage text.
+- **Refuses when there is no evidence.** A question outside the corpus gets a "not found" message, not a guess.
+- **Vietnamese questions find English documents**, thanks to a multilingual embedding model.
+- **Catches identifiers** such as `QCVN 25:2015/BLĐTBXH`, `TCVN 4244:2005` or `29 CFR 1910.147` through the BM25 keyword branch.
+- **Three retrieval modes** share one pipeline so they can be compared fairly: vector only, hybrid, hybrid with reranking.
 
-## Kiến trúc
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Ingest["Nạp tài liệu (chạy khi corpus thay đổi)"]
+    subgraph Ingest["Ingestion (when the corpus changes)"]
         direction LR
-        PDF[PDF VI/EN] --> EX[PyMuPDF<br/>tiến trình con có deadline]
-        EX --> CL[Làm sạch NFC<br/>chunk theo trang]
+        PDF[PDF VI/EN] --> EX[PyMuPDF<br/>child process with deadline]
+        EX --> CL[NFC cleanup<br/>page-bounded chunks]
         CL --> EMB[BGE-M3]
         EMB --> CH[(Chroma<br/>cosine)]
         CL --> JS[(chunks.jsonl)]
         JS --> BM[BM25]
     end
 
-    subgraph Query["Truy vấn (mỗi câu hỏi)"]
+    subgraph Query["Query (per question)"]
         direction LR
-        Q[Câu hỏi] --> V[Vector top 20]
+        Q[Question] --> V[Vector top 20]
         Q --> K[BM25 top 20]
         V --> RRF[RRF k=60<br/>top 10]
         K --> RRF
         RRF --> RR[bge-reranker-v2-m3<br/>top 5]
-        RR --> LLM[Qwen3 4B / Ollama<br/>JSON theo schema]
-        LLM --> VAL{Kiểm tra<br/>JSON + trích dẫn}
+        RR --> LLM[Qwen3 4B / Ollama<br/>schema-constrained JSON]
+        LLM --> VAL{Validate<br/>JSON + citations}
         VAL --> A[answered]
         VAL --> R[refused]
         VAL --> E[error]
@@ -62,150 +62,154 @@ flowchart LR
     BM -.-> K
 ```
 
-| Thành phần | Lựa chọn | Ghi chú |
+| Component | Choice | Notes |
 | --- | --- | --- |
-| LLM | `qwen3:4b-q4_K_M` qua Ollama | 100% trên GPU, khoảng 4 GB VRAM với context 8192 |
-| Embedding | `BAAI/bge-m3` | CPU, đa ngôn ngữ |
-| Reranker | `BAAI/bge-reranker-v2-m3` | CPU mặc định; GPU fp16 tùy chọn |
-| Lưu trữ | ChromaDB + JSONL + `rank_bm25` | JSONL là bản gốc, Chroma chỉ giữ vector |
-| Giao diện | Streamlit | |
-| Đóng gói | Docker Compose | Runtime trên mạng nội bộ, không có đường ra Internet |
+| LLM | `qwen3:4b-q4_K_M` via Ollama | 100% on GPU, about 4 GB VRAM at an 8192-token context |
+| Embedding | `BAAI/bge-m3` | CPU, multilingual |
+| Reranker | `BAAI/bge-reranker-v2-m3` | CPU by default; optional GPU fp16 |
+| Storage | ChromaDB + JSONL + `rank_bm25` | JSONL is the canonical text, Chroma holds vectors only |
+| UI | Streamlit | |
+| Packaging | Docker Compose | Runtime on an internal network with no route to the Internet |
 
-Pipeline được viết tay trên API của từng thư viện, không dùng framework RAG, để mỗi bước đều đọc và kiểm thử được.
+The pipeline is hand-written on each library's own API, with no RAG framework, so every step can be read and tested.
 
-## Quyết định thiết kế
+## Design decisions
 
-**Lỗi không bao giờ được hiển thị như câu trả lời.** Một truy vấn kết thúc ở đúng một trong ba trạng thái. JSON
-sai, trích dẫn không hợp lệ, timeout hay output bị cắt đều là `error` với mã riêng, tách khỏi `refused` (không đủ
-bằng chứng). Nhờ vậy số liệu "từ chối đúng" không bị lỗi hệ thống làm đẹp lên.
+**An error is never shown as an answer.** A query ends in exactly one of three states. Malformed JSON, an invalid
+citation, a timeout or truncated output is an `error` with its own code, kept apart from `refused` (not enough
+evidence). System failures therefore cannot inflate the "correct refusal" figure.
 
-**Trích dẫn bị ràng buộc bằng schema.** Output của model bị ép theo JSON schema mà danh sách ID nguồn hợp lệ được
-sinh riêng cho từng câu hỏi. Model không thể trích một nguồn không nằm trong ngữ cảnh.
+**Citations are constrained by the schema.** Model output is forced into a JSON schema whose list of valid source
+IDs is generated per question. The model cannot cite a source that is not in its context.
 
-**Prompt quá dài bị từ chối, không bị cắt ngầm.** Mặc định Ollama âm thầm cắt prompt vượt context và vẫn trả 200.
-Hệ thống gửi `truncate: false` để server báo lỗi rõ ràng; số token đếm cục bộ khớp tuyệt đối với
-`prompt_eval_count` trong các phép thử, kể cả với tiếng Việt và mã hiệu.
+**An over-long prompt is rejected, not silently cut.** By default Ollama truncates a prompt that exceeds the
+context and still returns 200. This system sends `truncate: false` so the server fails loudly; the locally counted
+token total matched Ollama's `prompt_eval_count` exactly in every probe, including Vietnamese text and identifiers.
 
-**Index theo generation, đổi con trỏ nguyên tử.** Mỗi lần ingest dựng một bản index hoàn chỉnh trong thư mục
-riêng, kiểm tra cả hai nhánh tìm kiếm rồi mới đổi con trỏ. Ingest lỗi hoặc bị ngắt không ảnh hưởng bản đang phục
-vụ; ingest lại cùng dữ liệu cho ra cùng một ID, trên máy thật lẫn trong container.
+**Index generations with an atomic pointer swap.** Each ingest builds a complete index in its own directory,
+probes both search branches, and only then switches the pointer. A failed or interrupted ingest leaves the serving
+index untouched; re-ingesting the same data yields the same ID, natively and inside the container.
 
-**Đánh giá tách khỏi model.** Mỗi lượt chạy lưu ảnh chụp câu hỏi, đáp án, toàn văn các đoạn đã truy xuất và hash
-của output. Bước chấm điểm không cần model hay index, và từ chối lượt chạy bị sửa sau khi tạo.
+**Scoring is independent of the models.** Each run stores a snapshot of the questions and gold answers, the full
+text of the retrieved passages and a hash of every output. Scoring needs neither models nor an index, and refuses
+a run that was edited after it was produced.
 
-**Offline là thứ được kiểm chứng.** Trong Docker Compose, hai container giữ dữ liệu và model chỉ nằm trên mạng
-`internal`. Test tự động xác nhận chúng không ra được Internet trong khi giao diện vẫn mở được ở `127.0.0.1`.
+**Offline is tested, not assumed.** In Docker Compose the two containers that hold data and models sit only on an
+`internal` network. An automated test confirms they cannot reach the Internet while the UI stays reachable on
+`127.0.0.1`.
 
-## Đánh giá
+## Evaluation
 
-Bộ câu hỏi gồm 60 câu, mỗi câu có đáp án kèm đoạn bằng chứng nguyên văn và số trang: **20 câu dev** để tinh
-chỉnh, **40 câu test** chỉ chạy sau khi cấu hình đã chốt. Bốn nhóm: tra số liệu, câu có mã hiệu, hỏi chéo ngôn
-ngữ, và câu ngoài tài liệu.
+The question set has 60 questions, each with a gold answer, a verbatim evidence span and its page: **20 dev
+questions** for tuning and **40 test questions** run only after the configuration was frozen. Four groups: fact
+lookups, questions that hinge on an identifier, cross-language questions, and questions outside the corpus.
 
-| Chỉ số trên 40 câu test | vector | hybrid | hybrid + rerank |
+| Metric on the 40 test questions | vector | hybrid | hybrid + rerank |
 | --- | --- | --- | --- |
-| Evidence Hit@1 | 14/34 (41,2%) | 18/34 (52,9%) | **27/34 (79,4%)** |
-| Evidence Hit@5 | 28/34 (82,4%) | 29/34 (85,3%) | **31/34 (91,2%)** |
-| MRR@5 | 0,591 | 0,666 | **0,848** |
-| Answer accuracy¹ | 31/34 (91,2%) | 32/34 (94,1%) | 31/34 (91,2%) |
-| Từ chối đúng câu ngoài tài liệu | 5/6 | 5/6 | 5/6 |
-| Lỗi hệ thống | 0/40 | 0/40 | 0/40 |
-| Độ trễ p50 / p95 | 2,8s / 3,8s | 2,8s / 4,2s | 3,0s / 4,2s² |
+| Evidence Hit@1 | 14/34 (41.2%) | 18/34 (52.9%) | **27/34 (79.4%)** |
+| Evidence Hit@5 | 28/34 (82.4%) | 29/34 (85.3%) | **31/34 (91.2%)** |
+| MRR@5 | 0.591 | 0.666 | **0.848** |
+| Answer accuracy¹ | 31/34 (91.2%) | 32/34 (94.1%) | 31/34 (91.2%) |
+| Correct refusal of out-of-corpus questions | 5/6 | 5/6 | 5/6 |
+| System errors | 0/40 | 0/40 | 0/40 |
+| Latency p50 / p95 | 2.8s / 3.8s | 2.8s / 4.2s | 3.0s / 4.2s² |
 
-¹ Chấm tạm thời bằng cách đối chiếu câu trả lời với đáp án, chưa được người chấm độc lập rà lại. Citation
-precision và coverage chưa chấm.
-² Reranker trên GPU. Trên CPU là 9,7s / 11,4s, với thứ tự top 5 giống hệt trên cả 40 câu.
+¹ Provisional grading by comparing each answer with the gold answer; not yet reviewed by an independent grader.
+Citation precision and coverage have not been graded.
+² Reranker on GPU. On CPU it is 9.7s / 11.4s, with an identical top-5 order on all 40 questions.
 
-**Evidence Hit@k** nghĩa là đoạn bằng chứng nguyên văn nằm trong k đoạn đầu được truy xuất, đúng tài liệu và đúng
-trang. Cùng trang nhưng thiếu đoạn bằng chứng không được tính.
+**Evidence Hit@k** means the verbatim evidence span is inside one of the first k retrieved chunks, from the right
+document and page. The right page without the span does not count.
 
-Cách đọc kết quả:
+Reading the results:
 
-- **Tìm kiếm lai và reranker cải thiện rõ thứ hạng bằng chứng**: tỷ lệ bằng chứng đúng đứng đầu tăng gần gấp đôi.
-- **Độ chính xác câu trả lời không tăng theo.** Cả ba chế độ sai 2–3 câu, mỗi chế độ sai câu khác nhau. Với 34
-  câu, một câu là 2,94 điểm phần trăm; chênh lệch này không có ý nghĩa thống kê.
-- **Điểm yếu chính nằm ở khâu sinh câu trả lời**: model 4B đôi khi kèm thêm một ý đúng nhưng lạc đề từ nguồn
-  khác. Đã thử bốn hướng sửa (quy tắc prompt, giảm ngữ cảnh, đổi bố cục prompt, model 8B); không hướng nào cải
-  thiện ròng nên cấu hình giữ nguyên. Chi tiết ở [`docs/limitations.md`](docs/limitations.md).
+- **Hybrid search and reranking clearly improve evidence ranking**: the share of questions with the correct
+  evidence in first place nearly doubles.
+- **Answer accuracy does not follow.** All three modes miss 2–3 questions, and each mode misses different ones.
+  With 34 questions, one question is 2.94 percentage points; the difference is not statistically meaningful.
+- **The main weakness is in generation**: the 4B model sometimes adds a true but off-topic claim taken from another
+  source. Four fixes were tried (a prompt rule, less context, a different prompt layout, an 8B model); none was a
+  net improvement, so the defaults are unchanged. Details in [`docs/limitations.md`](docs/limitations.md).
 
-Máy đo: Intel Core Ultra 9 275HX, 32 GB RAM, RTX 5060 Laptop 8 GB. RAM đỉnh của ứng dụng khoảng 4 GB.
-Báo cáo từng lượt chạy và bảng so sánh theo từng câu: [`docs/reports/`](docs/reports/).
-Rubric và quy trình: [`docs/evaluation.md`](docs/evaluation.md).
+Test machine: Intel Core Ultra 9 275HX, 32 GB RAM, RTX 5060 Laptop 8 GB. Peak application RAM is about 4 GB.
+Per-run reports and a per-question comparison: [`docs/reports/`](docs/reports/).
+Rubric and procedure: [`docs/evaluation.md`](docs/evaluation.md).
 
-## Giao diện
+## Interface
 
-![Màn hình bắt đầu với câu hỏi gợi ý](docs/images/ui-start.png)
+![Start screen with suggested questions](docs/images/ui-start.png)
 
-Nguồn được trích dẫn có số tô màu; bấm vào để xem đoạn trích. Câu hỏi ngoài tài liệu và lỗi hệ thống hiện thành
-thẻ riêng, không lẫn với câu trả lời.
+The interface is in Vietnamese. Cited sources have a filled number; click one to read the passage. Out-of-corpus
+questions and system errors appear as separate cards and are never mixed with answers.
 
-## Chạy thử
+## Quick start
 
-Cần Python 3.11, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com) và khoảng 8 GB dung lượng cho model.
+Requires Python 3.11, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com) and about 8 GB of disk for models.
 
 ```bash
-# 1. Môi trường và model (cần Internet, làm một lần)
+# 1. Environment and models (needs Internet, once)
 uv venv --python 3.11
 uv pip install --python .venv/bin/python --torch-backend cpu -r requirements-dev.txt
 ollama pull qwen3:4b-q4_K_M
 env PYTHONPATH=. .venv/bin/python scripts/bootstrap-models.py
 
-# 2. Từ đây không cần Internet
+# 2. No Internet needed from here on
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 .venv/bin/python -m src.ingest
 .venv/bin/python -m src.pipeline --question "Thời hạn kiểm định định kỳ của cần trục tự hành là bao lâu?"
 .venv/bin/python -m streamlit run src/app.py --server.address=127.0.0.1
 ```
 
-PDF không nằm trong repo. Danh sách URL và checksum SHA-256 ở [`data/sources.jsonl`](data/sources.jsonl); tải về
-`data/raw/` theo đúng tên file. Ingest bỏ qua file có checksum không khớp.
+The PDFs are not in the repository. URLs and SHA-256 checksums are listed in
+[`data/sources.jsonl`](data/sources.jsonl); download them into `data/raw/` under the listed file names. Ingest
+skips any file whose checksum does not match.
 
-Chạy bằng Docker Compose ở chế độ offline, hoặc đưa reranker lên GPU: xem [`docs/setup.md`](docs/setup.md).
+For the offline Docker Compose runtime, or to move the reranker to the GPU, see [`docs/setup.md`](docs/setup.md).
 
-## Cấu trúc mã nguồn
+## Repository layout
 
 ```
 src/
-  config.py        cấu hình từ biến môi trường, có kiểm tra giá trị
-  chunking.py      chia đoạn theo trang, ưu tiên ranh giới câu
-  pdf_extract.py   trích text PDF trong tiến trình con
-  ingest.py        dựng và công bố generation index
+  config.py        settings from environment variables, validated
+  chunking.py      page-bounded chunks that prefer sentence boundaries
+  pdf_extract.py   PDF text extraction in a child process
+  ingest.py        builds and publishes an index generation
   retriever.py     vector, BM25, RRF, rerank
-  generator.py     prompt, ngân sách token, gọi Ollama, kiểm tra trích dẫn
-  pipeline.py      ghép truy xuất và sinh câu trả lời; CLI
-  app.py           giao diện Streamlit
+  generator.py     prompt, token budget, Ollama call, citation validation
+  pipeline.py      retrieval + generation; CLI
+  app.py           Streamlit UI
 eval/
-  questions.jsonl  60 câu hỏi kèm đáp án và bằng chứng
+  questions.jsonl  60 questions with gold answers and evidence
   run_eval.py      generate, template, score, compare
-tests/             unit, integration với model thật, offline trên Compose
-docs/              setup, nguồn dữ liệu, đánh giá, giới hạn, báo cáo
+tests/             unit, real-model integration, offline Compose
+docs/              setup, sources, evaluation, limitations, reports
 ```
 
-Chạy test: `.venv/bin/python -m pytest -m "not integration"`.
+Run the tests: `.venv/bin/python -m pytest -m "not integration"`.
 
-## Giới hạn
+## Limitations
 
-- Chỉ đọc PDF có lớp text; chưa có OCR, bảng biểu bị đọc thành văn bản liền.
-- Một người dùng, một câu hỏi tại một thời điểm; chưa có phân quyền, nhật ký kiểm toán hay nhớ hội thoại.
-- Hệ thống bảo đảm ID trích dẫn tồn tại trong ngữ cảnh; việc đoạn trích có thật sự hỗ trợ khẳng định hay không
-  phải chấm bằng người.
-- Chưa chặn được prompt injection từ nội dung tài liệu: chỉ nên nạp tài liệu tin cậy.
-- Kho tài liệu có văn bản đã được sửa đổi hoặc thay thế; câu trả lời phản ánh bản PDF trong kho, không phải hiệu
-  lực pháp lý hiện hành.
-- PyMuPDF theo giấy phép AGPL-3.0 hoặc thương mại; triển khai nội bộ dạng đóng cần giấy phép thương mại hoặc đổi
-  thư viện.
+- Reads only PDFs with a text layer; no OCR, and tables are read as flowing text.
+- One user, one question at a time; no access control, audit log or conversation memory.
+- The system guarantees that a cited ID exists in the context; whether the passage really supports the claim has
+  to be graded by a person.
+- Prompt injection from document content is not blocked: ingest trusted documents only.
+- The corpus contains regulations that have since been amended or replaced; an answer reflects the PDF in the
+  corpus, not the law currently in force.
+- PyMuPDF is licensed under AGPL-3.0 or a commercial licence; a closed internal deployment needs the commercial
+  licence or a different parser.
 
-Danh sách đầy đủ: [`docs/limitations.md`](docs/limitations.md).
+Full list: [`docs/limitations.md`](docs/limitations.md).
 
-## Nếu triển khai cho tổ chức
+## Towards an organisation-wide deployment
 
-Những phần còn thiếu để đi từ bản demo một máy tới hệ thống dùng chung: phân quyền truy cập theo phòng ban, quy
-trình phê duyệt và theo dõi hiệu lực tài liệu nguồn, cập nhật corpus tự động, nhật ký câu hỏi phục vụ kiểm toán,
-máy chủ GPU nội bộ, và giám sát chất lượng định kỳ bằng bộ câu hỏi chuẩn.
+What is missing between this single-machine demo and a shared system: access control by department, an approval
+and validity-tracking process for source documents, automatic corpus updates, a question log for audit, an
+internal GPU server, and periodic quality monitoring against a standard question set.
 
-## Tài liệu
+## Documentation
 
-- [`docs/setup.md`](docs/setup.md): cài đặt, Docker Compose, cấu hình, mã lỗi
-- [`docs/sources.md`](docs/sources.md): nguồn tài liệu và điều kiện sử dụng
-- [`docs/evaluation.md`](docs/evaluation.md): bộ câu hỏi, rubric, quy trình
-- [`docs/limitations.md`](docs/limitations.md): giới hạn hiện tại
+- [`docs/setup.md`](docs/setup.md): installation, Docker Compose, configuration, error codes
+- [`docs/sources.md`](docs/sources.md): document sources and terms of use
+- [`docs/evaluation.md`](docs/evaluation.md): question set, rubric, procedure
+- [`docs/limitations.md`](docs/limitations.md): current limitations
