@@ -48,7 +48,7 @@ CSS = """
 .rag-ok { color: #18794E; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
 .rag-claim { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 16px; margin-bottom: 10px; }
 .rag-claim > span:first-child { flex: 1 1 320px; }
-.rag-chip { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #E8F0FC; color: #1456B8; padding: 3px 10px; border-radius: 6px; text-decoration: none; }
+.rag-chip { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #E8F0FC; color: #1456B8; padding: 3px 10px; border-radius: 6px; text-decoration: none !important; }
 .rag-sub { font-size: 13px; font-weight: 600; color: #46546A; border-top: 1px solid #E6EAF0; padding-top: 14px; margin: 14px 0 10px; }
 .rag-src { border: 1px solid #DCE2EA; border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
 .rag-src summary { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 8px 14px; cursor: pointer; list-style: none; font-size: 14px; }
